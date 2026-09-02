@@ -1,0 +1,243 @@
+import os
+import subprocess
+import unittest
+from unittest.mock import patch
+
+from siliconnet.tray import (
+    DNS_FLUSH_COMMAND,
+    MDNS_RELOAD_COMMAND,
+    TrayManager,
+    TrayRuntimeContext,
+    build_confirm_script,
+    build_full_shutdown_prompt,
+    build_status_title,
+    confirm_dialog,
+    escape_applescript,
+)
+
+
+class _Logger:
+    def __init__(self):
+        self.messages = []
+
+    def info(self, message):
+        self.messages.append(("info", message))
+
+    def error(self, message):
+        self.messages.append(("error", message))
+
+    def warning(self, message):
+        self.messages.append(("warning", message))
+
+
+class _Loop:
+    def __init__(self):
+        self.calls = []
+
+    def call_soon_threadsafe(self, callback):
+        self.calls.append(callback)
+        callback()
+
+
+class _Event:
+    def __init__(self):
+        self.set_count = 0
+
+    def set(self):
+        self.set_count += 1
+
+
+class _Icon:
+    def __init__(self):
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+
+async def _resolve_bypass_ips():
+    return None
+
+
+def _build_manager():
+    state = {"running": True, "saved": 0, "proxy": [], "released": 0}
+    loop = _Loop()
+    event = _Event()
+    logger = _Logger()
+    manager = TrayManager(
+        TrayRuntimeContext(
+            version="9.9.9",
+            logger=logger,
+            local_host="127.0.0.1",
+            web_port=8888,
+            log_file="missing.log",
+            app_file="/Applications/SiliconNet/siliconnet/__main__.py",
+            python_executable="python3",
+            get_status=lambda: "running",
+            get_ping_ms=lambda: 42,
+            get_loop=lambda: loop,
+            get_shutdown_event=lambda: event,
+            set_running=lambda value: state.__setitem__("running", value),
+            force_save=lambda: state.__setitem__("saved", state["saved"] + 1),
+            set_proxy_enabled=lambda value: state["proxy"].append(value),
+            release_instance_lock=lambda: state.__setitem__("released", state["released"] + 1),
+            resolve_bypass_ips=_resolve_bypass_ips,
+        )
+    )
+    return manager, state, loop, event, logger
+
+
+class TrayTextTests(unittest.TestCase):
+    def test_status_title_and_prompt_text(self):
+        self.assertEqual(build_status_title("running", 42), "SiliconNet - Active | 42ms")
+        self.assertEqual(build_status_title("stopped", -1), "SiliconNet - Stopped")
+        self.assertIn("Tam Kapatma", build_full_shutdown_prompt("tr")[0])
+        self.assertIn("Vollstaendiges", build_full_shutdown_prompt("de")[0])
+        self.assertIn("Full Shutdown", build_full_shutdown_prompt("en")[0])
+
+    def test_every_prompt_describes_the_macos_dns_flush(self):
+        for lang in ("tr", "de", "en"):
+            self.assertIn("dscacheutil -flushcache", build_full_shutdown_prompt(lang)[1])
+
+    def test_applescript_escaping_covers_quotes_backslashes_and_newlines(self):
+        self.assertEqual(escape_applescript('a "b" c'), 'a \\"b\\" c')
+        self.assertEqual(escape_applescript("a\\b"), "a\\\\b")
+        self.assertEqual(escape_applescript("line1\nline2"), "line1\\nline2")
+
+    def test_confirm_script_carries_title_message_and_buttons(self):
+        script = build_confirm_script('Title "X"', "line1\nline2", ("Cancel", "Continue"))
+
+        self.assertIn('display dialog "line1\\nline2"', script)
+        self.assertIn('with title "Title \\"X\\""', script)
+        self.assertIn('buttons {"Cancel", "Continue"}', script)
+        self.assertIn('default button "Continue"', script)
+
+
+class ConfirmDialogTests(unittest.TestCase):
+    def test_ok_button_confirms(self):
+        with patch("siliconnet.tray.subprocess.run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            self.assertTrue(confirm_dialog("Title", "Message", "en"))
+
+        self.assertEqual(run.call_args.args[0][0], "osascript")
+
+    def test_cancel_button_declines(self):
+        with patch("siliconnet.tray.subprocess.run", return_value=subprocess.CompletedProcess([], 1)):
+            self.assertFalse(confirm_dialog("Title", "Message", "en"))
+
+    def test_missing_osascript_falls_through_with_a_warning(self):
+        logger = _Logger()
+        with patch("siliconnet.tray.subprocess.run", side_effect=FileNotFoundError("osascript")):
+            self.assertTrue(confirm_dialog("Title", "Message", "en", logger))
+
+        self.assertEqual(logger.messages[0][0], "warning")
+
+
+class TrayActionTests(unittest.TestCase):
+    def test_exit_saves_state_clears_proxy_and_signals_shutdown(self):
+        manager, state, loop, event, logger = _build_manager()
+        icon = _Icon()
+
+        manager.exit(icon)
+
+        self.assertFalse(state["running"])
+        self.assertEqual(state["saved"], 1)
+        self.assertEqual(state["proxy"], [False])
+        self.assertEqual(len(loop.calls), 1)
+        self.assertEqual(event.set_count, 1)
+        self.assertTrue(icon.stopped)
+        self.assertIn(("info", "User exit"), logger.messages)
+
+    def test_restart_releases_lock_and_spawns_delayed_process(self):
+        manager, state, _loop, event, _logger = _build_manager()
+        icon = _Icon()
+
+        with patch("siliconnet.tray.subprocess.Popen") as popen:
+            manager.restart(icon)
+
+        self.assertFalse(state["running"])
+        self.assertEqual(state["released"], 1)
+        self.assertEqual(event.set_count, 1)
+        self.assertTrue(icon.stopped)
+        popen.assert_called_once()
+        self.assertIn("'-m', 'siliconnet'", popen.call_args.args[0][2])
+        source_dir = os.path.abspath("/Applications/SiliconNet")
+        self.assertIn(f"cwd={source_dir!r}", popen.call_args.args[0][2])
+
+    def test_open_log_uses_the_macos_open_command_when_the_file_exists(self):
+        manager, _state, _loop, _event, _logger = _build_manager()
+
+        with patch("siliconnet.tray.os.path.exists", return_value=True), patch("siliconnet.tray.subprocess.Popen") as popen:
+            manager.open_log()
+
+        popen.assert_called_once_with(["open", "-t", "missing.log"])
+
+    def test_open_log_is_skipped_when_the_log_file_is_absent(self):
+        manager, _state, _loop, _event, _logger = _build_manager()
+
+        with patch("siliconnet.tray.os.path.exists", return_value=False), patch("siliconnet.tray.subprocess.Popen") as popen:
+            manager.open_log()
+
+        popen.assert_not_called()
+
+    def test_open_dashboard_uses_the_configured_host_and_port(self):
+        manager, _state, _loop, _event, _logger = _build_manager()
+
+        with patch("siliconnet.tray.webbrowser.open") as browser:
+            manager.open_dashboard()
+
+        browser.assert_called_once_with("http://127.0.0.1:8888")
+
+
+class FullShutdownTests(unittest.TestCase):
+    def test_confirmed_shutdown_clears_proxy_and_flushes_dns(self):
+        manager, state, _loop, event, logger = _build_manager()
+        icon = _Icon()
+
+        with (
+            patch("siliconnet.tray.get_user_language", return_value="en"),
+            patch("siliconnet.tray.confirm_dialog", return_value=True),
+            patch("siliconnet.tray.subprocess.run", return_value=subprocess.CompletedProcess([], 0)) as run,
+        ):
+            manager._run_full_shutdown(icon)
+
+        self.assertFalse(state["running"])
+        self.assertEqual(state["proxy"], [False])
+        self.assertEqual(event.set_count, 1)
+        self.assertTrue(icon.stopped)
+        self.assertEqual([call.args[0] for call in run.call_args_list], [DNS_FLUSH_COMMAND, MDNS_RELOAD_COMMAND])
+        self.assertIn(("info", "Full shutdown initiated on macOS"), logger.messages)
+
+    def test_declined_shutdown_leaves_the_proxy_alone(self):
+        manager, state, _loop, event, _logger = _build_manager()
+        icon = _Icon()
+
+        with (
+            patch("siliconnet.tray.get_user_language", return_value="tr"),
+            patch("siliconnet.tray.confirm_dialog", return_value=False),
+            patch("siliconnet.tray.subprocess.run") as run,
+        ):
+            manager._run_full_shutdown(icon)
+
+        self.assertTrue(state["running"])
+        self.assertEqual(state["proxy"], [])
+        self.assertEqual(event.set_count, 0)
+        self.assertFalse(icon.stopped)
+        run.assert_not_called()
+
+    def test_missing_dscacheutil_is_reported_without_stopping_the_shutdown(self):
+        manager, _state, _loop, _event, logger = _build_manager()
+        icon = _Icon()
+
+        with (
+            patch("siliconnet.tray.get_user_language", return_value="en"),
+            patch("siliconnet.tray.confirm_dialog", return_value=True),
+            patch("siliconnet.tray.subprocess.run", side_effect=FileNotFoundError("dscacheutil")),
+        ):
+            manager._run_full_shutdown(icon)
+
+        self.assertTrue(icon.stopped)
+        self.assertTrue(any(level == "warning" for level, _ in logger.messages))
+
+
+if __name__ == "__main__":
+    unittest.main()

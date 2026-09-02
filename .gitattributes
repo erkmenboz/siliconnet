@@ -1,0 +1,13 @@
+# Shell entry points must keep LF endings so they run on macOS.
+*.sh text eol=lf
+*.command text eol=lf
+
+*.py text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+VERSION text eol=lf
+LICENSE text eol=lf
+
+*.png binary

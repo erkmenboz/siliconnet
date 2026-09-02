@@ -1,0 +1,73 @@
+# Byte-compiled / optimized / DLL support
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nosetests
+.pytest_cache/
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.stats/
+.coverage
+.coverage.*
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+active_env/
+
+# SiliconNet specific runtime generated files
+stats.json
+strategy_cache.json
+ai_strategy.json
+bypass.log
+macos_proxy_state.json
+
+# IDEs/Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS metadata
+.DS_Store
+._*
+.AppleDouble
+.Spotlight-V100
+.Trashes
