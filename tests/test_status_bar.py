@@ -4,7 +4,10 @@ import types
 import unittest
 from unittest.mock import patch
 
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 from siliconnet.status_bar import MENU_REFRESH_INTERVAL, RETINA_SCALE, status_bar_icon_class
 
@@ -124,6 +127,7 @@ def _cocoa_modules(image_factory, timer=None):
     return {"AppKit": appkit, "Foundation": foundation}
 
 
+@unittest.skipUnless(Image is not None, "Pillow is required for menu bar icon checks")
 class MenuBarImageTests(unittest.TestCase):
     def _icon(self, modules, image=None):
         icon = status_bar_icon_class(_pystray()).__call__(image or _source_image())
@@ -200,6 +204,7 @@ class MenuBarImageTests(unittest.TestCase):
         self.assertEqual(icon._status_item.button().images, [])
 
 
+@unittest.skipUnless(Image is not None, "Pillow is required for menu bar icon checks")
 class RunTests(unittest.TestCase):
     def test_run_drops_the_dock_tile_and_starts_the_menu_refresh(self):
         timer = _FakeTimer()

@@ -7,8 +7,16 @@ ARCHIVE="$ROOT/dist/siliconnet-macos-$VERSION.tar.gz"
 
 cd "$ROOT"
 
-python3 -m compileall -q siliconnet tests
-python3 -m unittest discover -s tests -v
+# The launcher installs the requirements into .venv; prefer that interpreter so
+# the Pillow-backed icon tests run instead of being skipped.
+if [ -x "$ROOT/.venv/bin/python" ]; then
+    PYTHON_BIN="$ROOT/.venv/bin/python"
+else
+    PYTHON_BIN="python3"
+fi
+
+"$PYTHON_BIN" -m compileall -q siliconnet tests
+"$PYTHON_BIN" -m unittest discover -s tests -v
 bash -n SiliconNet.command siliconnet-launcher.sh run_tests.sh scripts/build_macos_release.sh scripts/verify_macos_release.sh
 
 if grep -rniE "gsettings|kwriteconfig|kreadconfig|resolvectl|xdg-open|kdialog|zenity|winreg|windll|SIGBREAK" siliconnet/; then
