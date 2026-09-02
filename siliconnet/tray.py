@@ -18,6 +18,7 @@ import webbrowser
 from typing import Any, Awaitable, Callable
 
 from .os_integration import get_user_language
+from .status_bar import status_bar_icon_class
 
 try:
     import pystray
@@ -31,8 +32,9 @@ except ImportError:
 
 TRAY_AVAILABLE = PYSTRAY_AVAILABLE
 
-# macOS status bar items are rendered at 22pt; 44px covers Retina displays.
-TRAY_ICON_SIZE = 44
+# Source resolution for the status bar glyph. status_bar.py resamples it to
+# whatever the menu bar actually asks for, so keep headroom above 22pt @2x.
+TRAY_ICON_SIZE = 128
 DNS_FLUSH_COMMAND = ["dscacheutil", "-flushcache"]
 MDNS_RELOAD_COMMAND = ["killall", "-HUP", "mDNSResponder"]
 
@@ -212,35 +214,12 @@ def create_icon(color, app_dir: str | None = None):
         )
         for angle in range(0, 360, 60)
     ]
+    stroke = max(2, size // 15)
     draw.polygon(pts, outline=color)
-    draw.line([(cx, cy), (cx, cy - int(radius * 0.55))], fill=color, width=3)
-    draw.line([(cx, cy), (cx + int(radius * 0.40), cy + int(radius * 0.25))], fill=color, width=3)
-    draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=color)
+    draw.line([(cx, cy), (cx, cy - int(radius * 0.55))], fill=color, width=stroke)
+    draw.line([(cx, cy), (cx + int(radius * 0.40), cy + int(radius * 0.25))], fill=color, width=stroke)
+    draw.ellipse([cx - stroke, cy - stroke, cx + stroke, cy + stroke], fill=color)
     return img
-
-
-def status_bar_icon_class():
-    """Return a pystray Icon that marks its image as a macOS template.
-
-    pystray hands the status bar a plain ``NSImage``, so macOS never inverts it
-    for a dark menu bar and the black artwork would read as invisible. Marking
-    the image as a template restores the standard menu bar behavior.
-    """
-    class TemplateIcon(pystray.Icon):
-        def _assert_image(self):
-            super()._assert_image()
-            image = getattr(self, "_icon_image", None)
-            if image is None:
-                return
-            try:
-                image.setTemplate_(True)
-                self._status_item.button().setImage_(image)
-            except Exception:
-                # Older or patched pystray builds may not expose these; the
-                # icon still renders, just without dark mode inversion.
-                pass
-
-    return TemplateIcon
 
 
 class TrayManager:
@@ -365,7 +344,7 @@ class TrayManager:
             raise RuntimeError("Tray dependencies are not available")
 
         self.ctx.logger.info("Using pystray status bar item (native macOS)")
-        return status_bar_icon_class()(
+        return status_bar_icon_class(pystray)(
             "siliconnet",
             create_icon(STATUS_COLORS["running"], self.ctx.asset_dir),
             "SiliconNet - Active",

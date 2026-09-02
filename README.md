@@ -92,11 +92,36 @@ SiliconNet never installs a daemon, never edits `/Library` or `/etc`, and never 
 
 ## Menu Bar Notes
 
-The menu bar item is optional. It needs `pystray`, `Pillow`, and PyObjC, which the launcher installs. If they are unavailable, SiliconNet keeps running and the dashboard remains available.
+SiliconNet lives in the menu bar, at the top right next to Wi-Fi and the clock. **A single click opens the menu** — macOS does not use the separate right-click menu that Windows tray icons have:
 
-The menu bar icon (`assets/siliconnet_tray.png`) is black artwork on a transparent plate and is marked as a macOS template image, so it renders dark on a light menu bar and inverts to white on a dark one. `assets/siliconnet_app.png` keeps the full logo on its rounded plate.
+```text
+SiliconNet v2.1.4
+─────────────────
+Status: Active
+Ping: 21ms
+─────────────────
+Dashboard
+Refresh IPs
+Log File
+─────────────────
+Restart
+Exit
+Full Shutdown (Reset Network)
+```
+
+Status and ping are rebuilt every two seconds from a run loop timer, so they are current when you open the menu.
+
+SiliconNet runs as an accessory app: no Dock tile and no entry in the app switcher, the same as any other menu bar utility. The dashboard opens in your browser at `http://127.0.0.1:8888`, "Log File" opens the log in TextEdit.
+
+The menu bar item is optional. It needs `pystray`, `Pillow`, and PyObjC, which the launcher installs. If they are unavailable, SiliconNet keeps running and the dashboard remains reachable at the address above.
 
 "Full Shutdown (Reset Network)" stops the proxy, restores your proxy settings, and flushes the DNS cache with `dscacheutil -flushcache`. The follow-up `killall -HUP mDNSResponder` only takes effect when SiliconNet runs as root, so it is a harmless no-op in normal use.
+
+### Icons
+
+`assets/siliconnet_tray.png` is the artwork alone — black pixels on a transparent plate — supplied to macOS as a template image at twice the point size. macOS draws it dark on a light menu bar, inverts it to white on a dark one, and Retina displays get the full pixel detail. `assets/siliconnet_app.png` keeps the logo on its rounded plate.
+
+On a MacBook with a notch, a crowded menu bar can push items behind it. If the icon is not visible, the dashboard is still at `http://127.0.0.1:8888`.
 
 ## Build And Verify
 

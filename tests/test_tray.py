@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 import subprocess
-import types
 import unittest
 from unittest.mock import patch
 
@@ -15,7 +14,6 @@ from siliconnet.tray import (
     build_status_title,
     confirm_dialog,
     escape_applescript,
-    status_bar_icon_class,
 )
 
 try:
@@ -277,82 +275,6 @@ class IconAssetTests(unittest.TestCase):
 
         self.assertEqual(icon.width, icon.height)
         self.assertEqual(icon.getpixel((icon.width // 2, icon.height // 2))[3], 255)
-
-
-class _FakeButton:
-    def __init__(self):
-        self.images = []
-
-    def setImage_(self, image):
-        self.images.append(image)
-
-
-class _FakeStatusItem:
-    def __init__(self):
-        self._button = _FakeButton()
-
-    def button(self):
-        return self._button
-
-
-class _FakeNSImage:
-    def __init__(self):
-        self.template = None
-
-    def setTemplate_(self, value):
-        self.template = value
-
-
-class _FakeIcon:
-    image_factory = _FakeNSImage
-
-    def __init__(self, *args):
-        self.args = args
-        self._status_item = _FakeStatusItem()
-        self._icon_image = None
-
-    def _assert_image(self):
-        self._icon_image = self.image_factory() if self.image_factory else None
-
-
-def _fake_pystray(icon_class):
-    return types.SimpleNamespace(Icon=icon_class)
-
-
-class StatusBarIconTests(unittest.TestCase):
-    def _icon(self, icon_class):
-        with patch("siliconnet.tray.pystray", _fake_pystray(icon_class)):
-            icon = status_bar_icon_class()("siliconnet", None, "SiliconNet", None)
-            icon._assert_image()
-        return icon
-
-    def test_image_is_marked_as_a_template_and_reapplied_to_the_button(self):
-        icon = self._icon(_FakeIcon)
-
-        self.assertTrue(icon._icon_image.template)
-        self.assertEqual(icon._status_item.button().images, [icon._icon_image])
-
-    def test_missing_image_is_tolerated(self):
-        class _NoImage(_FakeIcon):
-            image_factory = None
-
-        icon = self._icon(_NoImage)
-
-        self.assertIsNone(icon._icon_image)
-        self.assertEqual(icon._status_item.button().images, [])
-
-    def test_unsupported_selector_does_not_break_the_icon(self):
-        class _Unsupported(_FakeNSImage):
-            def setTemplate_(self, value):
-                raise AttributeError("setTemplate_ is unavailable")
-
-        class _UnsupportedIcon(_FakeIcon):
-            image_factory = _Unsupported
-
-        icon = self._icon(_UnsupportedIcon)
-
-        self.assertIsNone(icon._icon_image.template)
-        self.assertEqual(icon._status_item.button().images, [])
 
 
 if __name__ == "__main__":
