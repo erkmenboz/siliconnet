@@ -219,6 +219,30 @@ def create_icon(color, app_dir: str | None = None):
     return img
 
 
+def status_bar_icon_class():
+    """Return a pystray Icon that marks its image as a macOS template.
+
+    pystray hands the status bar a plain ``NSImage``, so macOS never inverts it
+    for a dark menu bar and the black artwork would read as invisible. Marking
+    the image as a template restores the standard menu bar behavior.
+    """
+    class TemplateIcon(pystray.Icon):
+        def _assert_image(self):
+            super()._assert_image()
+            image = getattr(self, "_icon_image", None)
+            if image is None:
+                return
+            try:
+                image.setTemplate_(True)
+                self._status_item.button().setImage_(image)
+            except Exception:
+                # Older or patched pystray builds may not expose these; the
+                # icon still renders, just without dark mode inversion.
+                pass
+
+    return TemplateIcon
+
+
 class TrayManager:
     def __init__(self, context: TrayRuntimeContext):
         self.ctx = context
@@ -341,7 +365,7 @@ class TrayManager:
             raise RuntimeError("Tray dependencies are not available")
 
         self.ctx.logger.info("Using pystray status bar item (native macOS)")
-        return pystray.Icon(
+        return status_bar_icon_class()(
             "siliconnet",
             create_icon(STATUS_COLORS["running"], self.ctx.asset_dir),
             "SiliconNet - Active",

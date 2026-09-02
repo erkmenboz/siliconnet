@@ -17,12 +17,15 @@ if grep -rniE "gsettings|kwriteconfig|kreadconfig|resolvectl|xdg-open|kdialog|ze
 fi
 echo "OK: no non-macOS tooling references"
 
-# This script names the old brand in its own check, so it excludes itself.
-if grep -rnI --exclude="verify_macos_release.sh" --exclude-dir="__pycache__" "CleanNet\|cleannet" siliconnet/ tests/ assets/ scripts/ *.md *.sh *.command; then
-    echo "FAIL: old CleanNet branding found" >&2
+# Catches leftover identifiers: package paths, file names, env vars, UI strings.
+# README.md and CHANGELOG.md are skipped because they must name the upstream
+# project for MIT attribution, and this script names it in its own check.
+if grep -rnI --exclude="verify_macos_release.sh" --exclude="README.md" --exclude="CHANGELOG.md" \
+    --exclude-dir="__pycache__" "CleanNet\|cleannet" siliconnet/ tests/ assets/ scripts/ *.md *.sh *.command; then
+    echo "FAIL: old branding found in code or packaging" >&2
     exit 1
 fi
-echo "OK: no leftover CleanNet branding"
+echo "OK: no leftover branding in code or packaging"
 
 scripts/build_macos_release.sh
 

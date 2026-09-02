@@ -94,6 +94,8 @@ SiliconNet never installs a daemon, never edits `/Library` or `/etc`, and never 
 
 The menu bar item is optional. It needs `pystray`, `Pillow`, and PyObjC, which the launcher installs. If they are unavailable, SiliconNet keeps running and the dashboard remains available.
 
+The menu bar icon (`assets/siliconnet_tray.png`) is black artwork on a transparent plate and is marked as a macOS template image, so it renders dark on a light menu bar and inverts to white on a dark one. `assets/siliconnet_app.png` keeps the full logo on its rounded plate.
+
 "Full Shutdown (Reset Network)" stops the proxy, restores your proxy settings, and flushes the DNS cache with `dscacheutil -flushcache`. The follow-up `killall -HUP mDNSResponder` only takes effect when SiliconNet runs as root, so it is a harmless no-op in normal use.
 
 ## Build And Verify
