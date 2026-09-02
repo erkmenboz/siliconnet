@@ -62,6 +62,7 @@ class ProxyRuntimeContext:
     strategy_success_timeout: float
     blocked_domain_ttl: int
     site_max_concurrent: int
+    sni_shield_fallbacks: tuple[str, ...] = ("tls_record_frag", "tls_multi_record", "fragment_light")
     open_connection: Callable[..., Awaitable[tuple[Reader, Writer]]] = open_connection_dual_stack
 
 
@@ -142,24 +143,39 @@ class ProxyEngine:
             except Exception as e:
                 self.ctx.logger.warning(f"[SNI-SHIELD] {strategy_name} failed for {self.ctx.hash_host(target_host)}: {e}")
                 close_writer(active_writer)
-                active_reader, active_writer = await self.try_connect(target_host, target_port)
-                if not active_writer:
-                    return {"status": "failed", "detail": "fallback connect failed"}
-                await self.ctx.direct_strategy(active_writer, first_chunk)
-                try:
-                    server_reply = await asyncio.wait_for(
-                        active_reader.read(8192),
-                        timeout=self.ctx.strategy_success_timeout,
-                    )
-                    if is_valid_tls_reply(server_reply):
-                        client_writer.write(server_reply)
-                        await client_writer.drain()
-                        self.ctx.logger.info(f"[SNI-SHIELD] {target_host}:{target_port} fell back to direct")
-                        await self.tunnel_plain(client_reader, client_writer, active_reader, active_writer)
-                        return {"status": "fallback", "detail": "direct fallback"}
-                except Exception:
-                    pass
-                return {"status": "failed", "detail": "direct fallback failed"}
+                # Falling straight back to "direct" hands the plain ClientHello to the
+                # DPI that just blocked us, so try the remaining shield strategies first
+                # and only then let an unmodified hello through.
+                fallbacks = [s for s in self.ctx.sni_shield_fallbacks if s != strategy_name]
+                for candidate in [*fallbacks, "direct"]:
+                    strategy_func = self.ctx.strategy_funcs.get(candidate)
+                    if strategy_func is None:
+                        continue
+                    active_reader, active_writer = await self.try_connect(target_host, target_port)
+                    if not active_writer:
+                        return {"status": "failed", "detail": "fallback connect failed"}
+                    try:
+                        await strategy_func(active_writer, first_chunk)
+                        server_reply = await asyncio.wait_for(
+                            active_reader.read(8192),
+                            timeout=self.ctx.strategy_success_timeout,
+                        )
+                        if not is_valid_tls_reply(server_reply):
+                            raise ConnectionError("invalid TLS reply")
+                    except Exception as fallback_exc:
+                        self.ctx.logger.info(
+                            f"[SNI-SHIELD] fallback {candidate} failed for "
+                            f"{self.ctx.hash_host(target_host)}: {fallback_exc}"
+                        )
+                        close_writer(active_writer)
+                        active_writer = None
+                        continue
+                    client_writer.write(server_reply)
+                    await client_writer.drain()
+                    self.ctx.logger.info(f"[SNI-SHIELD] {target_host}:{target_port} fell back to {candidate}")
+                    await self.tunnel_plain(client_reader, client_writer, active_reader, active_writer)
+                    return {"status": "fallback", "detail": f"{candidate} fallback"}
+                return {"status": "failed", "detail": "all fallbacks failed"}
         finally:
             close_writer(active_writer)
 

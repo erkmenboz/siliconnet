@@ -52,7 +52,12 @@ class RuntimeSettings:
     blocked_domain_ttl: int = 300
     site_max_concurrent: int = 24
     dns_privacy_cache_ttl: int = 900
-    global_sni_strategy: str = "host_split"
+    # TLS *record* layer fragmentation: the ClientHello body is split across two
+    # 0x16 records so a DPI that only scans one record never sees the whole SNI.
+    # host_split (plain TCP segmentation) is reassembled by DPI boxes that track
+    # TCP streams, so it is not a reliable default.
+    global_sni_strategy: str = "tls_record_frag"
+    sni_shield_fallbacks: tuple[str, ...] = ("tls_record_frag", "tls_multi_record", "fragment_light")
     autostart_label: str = "SiliconNetDPIBypass"
     cdn_keyword_map: dict[str, str] = field(default_factory=lambda: {"discordapp": "discord"})
 

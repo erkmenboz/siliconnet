@@ -127,6 +127,7 @@ class SiliconNetRuntime:
 
         proxy_ctx = self.proxy_engine.ctx
         proxy_ctx.global_sni_strategy = self.settings.global_sni_strategy
+        proxy_ctx.sni_shield_fallbacks = self.settings.sni_shield_fallbacks
         proxy_ctx.strategy_success_timeout = self.settings.strategy_success_timeout
         proxy_ctx.blocked_domain_ttl = self.settings.blocked_domain_ttl
         proxy_ctx.site_max_concurrent = self.settings.site_max_concurrent
@@ -411,6 +412,7 @@ class SiliconNetRuntime:
             record_privacy_event=self.record_privacy_event,
             doh_bootstrap_map=DOH_BOOTSTRAP_MAP,
             global_sni_strategy=self.settings.global_sni_strategy,
+            sni_shield_fallbacks=self.settings.sni_shield_fallbacks,
             strategy_success_timeout=self.settings.strategy_success_timeout,
             blocked_domain_ttl=self.settings.blocked_domain_ttl,
             site_max_concurrent=self.settings.site_max_concurrent,
