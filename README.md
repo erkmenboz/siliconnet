@@ -1,152 +1,168 @@
 # SiliconNet
 
-SiliconNet is a local DPI bypass proxy for macOS. It listens on `127.0.0.1`, routes selected HTTPS connections through a local proxy, and can fragment TLS ClientHello traffic for configured sites.
+**English** · [Türkçe](README.tr.md) · [Deutsch](README.de.md)
 
-**macOS only.** There is no Windows or Linux build. The launcher refuses to start on anything but Darwin, and the OS integration is written directly against `networksetup`, `launchctl`, `lsof`, and `osascript`.
+A local DPI bypass proxy for macOS. It runs on your own Mac, listens on
+`127.0.0.1`, and routes the sites you configure through a local proxy that
+fragments the TLS ClientHello so a deep-packet-inspection box cannot read the
+server name and drop the connection.
+
+![macOS 12+](https://img.shields.io/badge/macOS-12%2B-black)
+![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
+![License MIT](https://img.shields.io/badge/License-MIT-green)
+
+## What it is for
+
+Some networks block sites by looking at the `SNI` field of the TLS handshake —
+the server name your browser sends in the clear before encryption starts — and
+resetting the connection when it matches a blocklist. The same networks often
+poison DNS so the domain resolves to a block page instead of the real server.
+
+SiliconNet addresses both:
+
+- **DNS over HTTPS.** Configured domains are resolved through an encrypted DoH
+  resolver, so a poisoned local DNS answer is never used.
+- **TLS record fragmentation.** The ClientHello is split across two TLS records,
+  so a DPI box that scans a single record never sees the whole server name.
+  Twenty-five strategies are available; the engine measures which one works on
+  your network and keeps using it.
+
+Only the sites you list go through the proxy. Everything else connects normally.
+
+**This is not a VPN and not an anonymity tool.** It does not hide your IP
+address, and the site you visit still sees your real address. It only changes
+how the connection is *opened* so that a filter in the middle cannot classify
+it. Use it where you are allowed to.
 
 ## Requirements
 
 | | |
 |---|---|
-| OS | macOS 12 Monterey or newer |
+| OS | macOS 12 Monterey or newer — **macOS only**, there is no Windows or Linux build |
 | Python | 3.10+ (Homebrew, python.org, or Command Line Tools) |
-| Python packages | `pystray`, `Pillow`, `pyobjc-framework-Cocoa`, `pyobjc-framework-Quartz` — installed by the launcher |
-| Privileges | None for an admin account; a standard account is prompted once by macOS when the proxy is enabled |
+| Privileges | None on an admin account; a standard account is prompted once by macOS |
 
-## What Works
+The launcher installs the Python packages (`pystray`, `Pillow`, PyObjC) into a
+local virtual environment. Nothing is installed system-wide, no daemon is added,
+and nothing runs as root.
 
-- Core proxy, DNS over HTTPS, strategy selection, AI strategy cache, and dashboard.
-- System proxy settings are managed with the built-in `networksetup` tool, applied to every enabled network service (Wi-Fi, Ethernet, …).
-- Autostart uses a user-level LaunchAgent in `~/Library/LaunchAgents`; no root daemon is installed.
-- The menu bar item uses `pystray` (a native `NSStatusItem` through PyObjC); confirmation dialogs use `osascript`.
-- Network-flow diagnostics use the built-in `lsof`; if it is unavailable, only that dashboard feature is disabled.
-
-## Install And Run
+## Install
 
 ```bash
-tar -xzf siliconnet-macos-<version>.tar.gz
-cd siliconnet-macos-<version>
+git clone https://github.com/erkmenboz/siliconnet.git
+cd siliconnet
 ./siliconnet-launcher.sh
 ```
 
-In Finder you can also double-click `SiliconNet.command`, which opens Terminal and runs the same launcher.
+In Finder you can also double-click **`SiliconNet.command`**, which opens
+Terminal and runs the same launcher.
 
-Then open:
-
-```text
-http://127.0.0.1:8888
-```
-
-The first launch creates a virtual environment in `.venv` and installs the requirements. If `python3 -m venv` fails, install the Command Line Tools:
+The first run creates `.venv` and installs the requirements. If
+`python3 -m venv` fails, install the Command Line Tools:
 
 ```bash
 xcode-select --install
 ```
 
-Manual run:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m siliconnet
-```
-
-## Gatekeeper Note
-
-The tarball is unsigned. macOS quarantines files downloaded with a browser, so the first `./siliconnet-launcher.sh` may be blocked. Clear the quarantine flag on the extracted folder:
+If you downloaded a release archive instead of cloning, macOS may quarantine it:
 
 ```bash
 xattr -dr com.apple.quarantine siliconnet-macos-<version>
 ```
 
-## Data Locations
+## Use it
 
-SiliconNet stores runtime data under:
+Once it is running:
+
+- The **menu bar icon** appears at the top right, next to Wi-Fi and the clock.
+  A single click opens the menu — status, ping, dashboard, restart, exit.
+- The **dashboard** is at **<http://127.0.0.1:8888>**.
+
+In the dashboard you can add the domains you want routed, watch which strategy
+is winning, and switch language (EN/TR/DE) and appearance (light/dark).
+
+**To start automatically at login:** dashboard → **Settings** → **Auto-start**.
+This installs a user LaunchAgent in `~/Library/LaunchAgents`. Keep the project
+folder where it is afterwards — the agent stores its full path.
+
+**To stop:** menu bar → **Exit**. Closing the Terminal window is not enough;
+your system proxy settings need to be restored on the way out.
+
+## How it works
+
+SiliconNet writes the HTTP and HTTPS proxy of every enabled network service with
+the built-in `networksetup` tool, backs up the previous values to
+`macos_proxy_state.json`, and restores them when it stops.
+
+On most personal Macs the logged-in user is an administrator and `networksetup`
+applies the change without a password. If macOS refuses — a standard account, or
+"require an administrator password to change settings" — the same batch is
+replayed once through `osascript … with administrator privileges`, which shows
+the native password dialog. Cancelling it leaves your settings untouched.
+
+Some apps embed their own HTTP stack and ignore the macOS proxy entirely
+(Discord's updater is the usual case). While SiliconNet owns the proxy it also
+publishes `HTTP_PROXY`/`HTTPS_PROXY` into the launchd session, so apps launched
+afterwards can reach it. Both are undone on exit.
+
+### Where your data lives
 
 ```text
-${SILICONNET_DATA_DIR}
 ~/Library/Application Support/SiliconNet
 ```
 
-Typical files:
-
 | File | Purpose |
 |---|---|
-| `config.json` | Sites, ports, privacy/performance settings |
-| `bypass.log` | Warning/error disk log |
-| `macos_proxy_state.json` | Previous proxy state of every network service while SiliconNet owns proxy settings |
-| `strategy_cache.json` | Learned strategy cache |
+| `config.json` | Sites, ports, privacy and performance settings |
+| `bypass.log` | Warning/error log (set `DPI_BYPASS_LOG_LEVEL=INFO` for detail) |
+| `macos_proxy_state.json` | Your previous proxy state, restored on exit |
+| `strategy_cache.json` | Which strategy works for which site |
 | `ai_strategy.json` | Adaptive strategy learning data |
 | `stats.json` | Runtime counters |
 
-LaunchAgent logs go to `~/Library/Logs/SiliconNet/`.
+LaunchAgent logs go to `~/Library/Logs/SiliconNet/`. Nothing is sent anywhere;
+all of it stays on your Mac. See [PRIVACY.md](PRIVACY.md).
 
-## Proxy Behavior
+## Troubleshooting
 
-SiliconNet writes the HTTP and HTTPS proxy of your enabled network services and their bypass domains, then restores the previous values from `macos_proxy_state.json` when it stops or when the proxy is turned off from the dashboard or menu bar.
-
-On most personal Macs the logged-in user is an administrator and `networksetup` applies the change without a password. If macOS refuses it — a standard user account, or the "require an administrator password to change settings" option — the same batch of commands is replayed once through `osascript … with administrator privileges`, which shows the native password dialog. Cancelling that dialog leaves your settings untouched and SiliconNet reports the failure.
-
-SiliconNet never installs a daemon, never edits `/Library` or `/etc`, and never runs anything as root outside that single authorized batch.
-
-## Menu Bar Notes
-
-SiliconNet lives in the menu bar, at the top right next to Wi-Fi and the clock. **A single click opens the menu** — macOS does not use the separate right-click menu that Windows tray icons have:
-
-```text
-SiliconNet v1.0
-─────────────────
-Status: Active
-Ping: 21ms
-─────────────────
-Dashboard
-Refresh IPs
-Log File
-─────────────────
-Restart
-Exit
-Full Shutdown (Reset Network)
-```
-
-Status and ping are rebuilt every two seconds from a run loop timer, so they are current when you open the menu.
-
-SiliconNet runs as an accessory app: no Dock tile and no entry in the app switcher, the same as any other menu bar utility. The dashboard opens in your browser at `http://127.0.0.1:8888`, "Log File" opens the log in TextEdit.
-
-The menu bar item is optional. It needs `pystray`, `Pillow`, and PyObjC, which the launcher installs. If they are unavailable, SiliconNet keeps running and the dashboard remains reachable at the address above.
-
-"Full Shutdown (Reset Network)" stops the proxy, restores your proxy settings, and flushes the DNS cache with `dscacheutil -flushcache`. The follow-up `killall -HUP mDNSResponder` only takes effect when SiliconNet runs as root, so it is a harmless no-op in normal use.
-
-### Icons
-
-`assets/siliconnet_tray.png` is the artwork alone — black pixels on a transparent plate — supplied to macOS as a template image at twice the point size. macOS draws it dark on a light menu bar, inverts it to white on a dark one, and Retina displays get the full pixel detail. `assets/siliconnet_app.png` keeps the logo on its rounded plate.
-
-On a MacBook with a notch, a crowded menu bar can push items behind it. If the icon is not visible, the dashboard is still at `http://127.0.0.1:8888`.
-
-## Build And Verify
-
-Run tests:
+**No internet after SiliconNet stopped unexpectedly.** Your system proxy may
+still point at a port nothing is listening on. Start SiliconNet again — it
+detects and clears a stale setting on startup — or turn the proxy off manually:
 
 ```bash
-./run_tests.sh
+networksetup -setwebproxystate Wi-Fi off
+networksetup -setsecurewebproxystate Wi-Fi off
 ```
 
-Build a clean tarball:
+**A site still does not open.** Apps started *before* the proxy was enabled may
+not have picked it up; quit and reopen the app. Browsers read the proxy setting
+at launch, so quit the browser fully (⌘Q) rather than just closing the window.
+
+**No menu bar icon.** It needs `pystray`, `Pillow` and PyObjC, which the
+launcher installs into `.venv`. If you start the app with a different
+interpreter, the icon is skipped and everything else still works. On a MacBook
+with a notch, a crowded menu bar can also push the icon out of sight — the
+dashboard is still reachable at the address above.
+
+**See what it is doing.** Start with `DPI_BYPASS_LOG_LEVEL=INFO
+./siliconnet-launcher.sh`, or open the **Logs** tab in the dashboard.
+
+## Build and verify
 
 ```bash
-scripts/build_macos_release.sh
+./run_tests.sh                      # test suite
+scripts/build_macos_release.sh      # clean tarball in dist/
+scripts/verify_macos_release.sh     # tests + packaging checks
 ```
 
-Full verification:
+## Credits and license
 
-```bash
-scripts/verify_macos_release.sh
-```
+SiliconNet is MIT licensed.
 
-## Credits And License
+Its proxy core, strategy engine, and dashboard are derived from
+CleanNet (MIT, Copyright © 2026 digaxie).
+The original copyright notice is kept in [LICENSE](LICENSE).
 
-SiliconNet is MIT licensed. Its proxy core, strategy engine, and dashboard are derived from CleanNet (MIT, Copyright (c) 2026 digaxie); the original notice is kept in `LICENSE`. The macOS integration layer — `networksetup` proxy management, the LaunchAgent autostart, the `lsof` flow parser, and the menu bar item — is written for this project.
-
-## Türkçe Kısa Not
-
-SiliconNet macOS sürümü `python -m siliconnet` ile çalışır; Finder'dan `SiliconNet.command` dosyasına çift tıklayarak da açabilirsin. Proxy ayarlarını `networksetup` ile etkin ağ servislerine (Wi-Fi, Ethernet) yazar ve çıkarken eski haline döndürür. Standart kullanıcı hesaplarında macOS parola sorabilir; bu, sistemin kendi yönetici penceresidir. Veriler `~/Library/Application Support/SiliconNet` klasöründe tutulur. İnternetten indirdiğin arşiv açılmazsa `xattr -dr com.apple.quarantine siliconnet-macos-<sürüm>` komutunu çalıştır.
+The macOS integration layer is written for this project: `networksetup` proxy
+management, the LaunchAgent autostart, the `lsof` flow parser, the menu bar
+item, and the environment compatibility layer.

@@ -14,7 +14,7 @@ rm -rf "$STAGE" "$ARCHIVE"
 mkdir -p "$STAGE" "$DIST"
 
 cp -a siliconnet assets scripts "$STAGE/"
-cp -a SiliconNet.command siliconnet-launcher.sh run_tests.sh requirements.txt README.md PRIVACY.md SECURITY.md SECURITY_HARDENING.md LICENSE VERSION CHANGELOG.md RELEASE.md "$STAGE/"
+cp -a SiliconNet.command siliconnet-launcher.sh run_tests.sh requirements.txt README.md README.tr.md README.de.md PRIVACY.md SECURITY.md SECURITY_HARDENING.md LICENSE VERSION CHANGELOG.md RELEASE.md "$STAGE/"
 
 find "$STAGE" -type d -name "__pycache__" -prune -exec rm -rf {} +
 find "$STAGE" -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete

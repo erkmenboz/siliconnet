@@ -26,9 +26,9 @@ fi
 echo "OK: no non-macOS tooling references"
 
 # Catches leftover identifiers: package paths, file names, env vars, UI strings.
-# README.md and CHANGELOG.md are skipped because they must name the upstream
+# The READMEs and CHANGELOG.md are skipped because they must name the upstream
 # project for MIT attribution, and this script names it in its own check.
-if grep -rnI --exclude="verify_macos_release.sh" --exclude="README.md" --exclude="CHANGELOG.md" \
+if grep -rnI --exclude="verify_macos_release.sh" --exclude="README*.md" --exclude="CHANGELOG.md" \
     --exclude-dir="__pycache__" "CleanNet\|cleannet" siliconnet/ tests/ assets/ scripts/ *.md *.sh *.command; then
     echo "FAIL: old branding found in code or packaging" >&2
     exit 1

@@ -1,6 +1,12 @@
 MIT License
 
 Copyright (c) 2026 digaxie
+  — CleanNet: proxy core, strategy engine, and dashboard, from which this
+    project is derived.
+
+Copyright (c) 2026 SiliconNet contributors
+  — macOS integration layer: networksetup proxy management, LaunchAgent
+    autostart, lsof flow parser, menu bar item, and app-compat env layer.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
