@@ -244,6 +244,12 @@ class SiliconNetRuntime:
     def get_site_ips(self, host: str) -> list[str]:
         return self.state.get_site_ips(host, self.settings.cdn_keyword_map)
 
+    def env_proxy_compat_enabled(self) -> bool:
+        app_compat_cfg = self.state.config.get("app_compat", {})
+        if not isinstance(app_compat_cfg, dict):
+            return True
+        return bool(app_compat_cfg.get("env_proxy", True))
+
     def set_proxy(self, enable: bool, host: str = "127.0.0.1", port: int = 8080):
         return set_system_proxy(
             enable,
@@ -253,6 +259,7 @@ class SiliconNetRuntime:
             self.state.config.get("proxy_bypass", []),
             app_dir=self.paths.data_dir,
             logger=self.logger,
+            publish_env=self.env_proxy_compat_enabled(),
         )
 
     def ensure_proxy(self):
@@ -263,6 +270,7 @@ class SiliconNetRuntime:
             self.state.config.get("proxy_bypass", []),
             app_dir=self.paths.data_dir,
             logger=self.logger,
+            publish_env=self.env_proxy_compat_enabled(),
         )
 
     def get_autostart(self) -> bool:

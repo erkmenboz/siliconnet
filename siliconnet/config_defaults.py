@@ -55,6 +55,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "hide_dns": True,
         "hide_sni": True,
     },
+    "app_compat": {
+        # Publish HTTP(S)_PROXY/ALL_PROXY into the launchd session while the
+        # system proxy is owned, so apps that ignore macOS proxy settings
+        # (e.g. Discord's Rust updater) still reach the proxy.
+        "env_proxy": True,
+    },
     "performance": {
         "low_latency_mode": True,
         "background_training": False,

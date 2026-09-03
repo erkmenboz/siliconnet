@@ -25,6 +25,7 @@ import sys
 import time
 from typing import Any
 
+from . import app_compat
 from .settings import default_data_dir
 
 
@@ -332,6 +333,23 @@ def get_proxy_summary(app_dir: str, host: str, port: int) -> dict[str, Any]:
     return payload
 
 
+def _publish_env_safely(host: str, port: int, logger=None) -> None:
+    """Publish the app-compat env vars; never let a failure flip the proxy result."""
+    try:
+        app_compat.ensure_proxy_env(host, port, logger=logger)
+    except Exception as exc:
+        if logger:
+            logger.warning(f"[APP-COMPAT] env publish failed: {exc}")
+
+
+def _unpublish_env_safely(logger=None) -> None:
+    try:
+        app_compat.remove_proxy_env(logger=logger)
+    except Exception as exc:
+        if logger:
+            logger.warning(f"[APP-COMPAT] env removal failed: {exc}")
+
+
 def ensure_system_proxy_enabled(
     host: str,
     port: int,
@@ -339,11 +357,18 @@ def ensure_system_proxy_enabled(
     user_bypass: list[str] | None,
     app_dir: str = "",
     logger=None,
+    publish_env: bool = True,
 ) -> bool:
     summary = get_proxy_summary(app_dir, host, port)
     if summary.get("owned_by_siliconnet"):
+        # The proxy setting survives reboots but the launchd environment does
+        # not, so re-publish idempotently on every check.
+        if publish_env:
+            _publish_env_safely(host, port, logger=logger)
         return True
-    return set_system_proxy(True, host, port, always_bypass, user_bypass, app_dir, logger=logger)
+    return set_system_proxy(
+        True, host, port, always_bypass, user_bypass, app_dir, logger=logger, publish_env=publish_env
+    )
 
 
 def recover_orphaned_proxy(host: str, port: int, app_dir: str, logger=None) -> bool:
@@ -385,6 +410,7 @@ def set_system_proxy(
     user_bypass: list[str] | None,
     app_dir: str,
     logger=None,
+    publish_env: bool = True,
 ) -> bool:
     backend = detect_proxy_backend()
     if not backend.supported:
@@ -399,6 +425,8 @@ def set_system_proxy(
             _enable_backend_proxy(backend.name, host, port, build_bypass_list(always_bypass, user_bypass))
             if logger:
                 logger.info("macOS system proxy enabled via networksetup")
+            if publish_env:
+                _publish_env_safely(host, port, logger=logger)
             return True
 
         backup = _load_backup(app_dir)
@@ -407,6 +435,8 @@ def set_system_proxy(
             _delete_backup(app_dir)
             if logger:
                 logger.info("[PROXY] Previous macOS proxy state restored")
+            if publish_env:
+                _unpublish_env_safely(logger=logger)
             return True
 
         commands = _disable_commands(host, port)
@@ -414,6 +444,8 @@ def set_system_proxy(
             _apply_commands(commands)
             if logger:
                 logger.info("macOS SiliconNet proxy cleared via networksetup")
+        if publish_env:
+            _unpublish_env_safely(logger=logger)
         return True
     except Exception as exc:
         if logger:
