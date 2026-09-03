@@ -71,3 +71,14 @@ macos_proxy_state.json
 .AppleDouble
 .Spotlight-V100
 .Trashes
+
+# Runtime state. It normally lives in ~/Library/Application Support/SiliconNet,
+# but SILICONNET_DATA_DIR can point anywhere -- including into a checkout -- and
+# config.json carries the site list the user actually browses.
+config.json
+macos_proxy_state.json
+strategy_cache.json
+ai_strategy.json
+
+# Browser automation artifacts
+.playwright-mcp/
