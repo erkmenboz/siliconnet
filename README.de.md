@@ -174,7 +174,8 @@ SiliconNet steht unter der MIT-Lizenz.
 
 Proxy-Kern, Strategie-Engine und Dashboard sind von CleanNet abgeleitet (MIT,
 Copyright © 2026 digaxie). Der ursprüngliche Copyright-Hinweis bleibt in
-[LICENSE](LICENSE) erhalten.
+[LICENSE](LICENSE) erhalten; die Aufteilung zwischen Upstream und diesem
+Projekt steht in [NOTICE](NOTICE).
 
 Die macOS-Integrationsschicht wurde für dieses Projekt geschrieben:
 Proxy-Verwaltung über `networksetup`, Autostart per LaunchAgent, der

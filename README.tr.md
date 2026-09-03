@@ -168,7 +168,8 @@ SiliconNet MIT lisanslıdır.
 
 Proxy çekirdeği, strateji motoru ve paneli CleanNet'ten (MIT, Telif hakkı ©
 2026 digaxie) türetilmiştir. Orijinal telif bildirimi [LICENSE](LICENSE)
-dosyasında korunmaktadır.
+dosyasında korunur; hangi bölümün nereden geldiği [NOTICE](NOTICE) dosyasında
+ayrıntılıdır.
 
 macOS entegrasyon katmanı bu proje için yazılmıştır: `networksetup` ile proxy
 yönetimi, LaunchAgent ile otomatik başlatma, `lsof` tabanlı akış çözümleyici,

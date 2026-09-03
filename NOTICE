@@ -1,0 +1,15 @@
+SiliconNet
+==========
+
+This project is distributed under the MIT License; see LICENSE.
+
+Upstream
+--------
+The proxy core, strategy engine, and dashboard are derived from CleanNet,
+Copyright (c) 2026 digaxie, used under the MIT License.
+
+This project
+------------
+The macOS integration layer is Copyright (c) 2026 SiliconNet contributors:
+networksetup proxy management, LaunchAgent autostart, the lsof flow parser,
+the menu bar item, and the environment compatibility layer.
