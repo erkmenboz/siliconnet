@@ -95,11 +95,18 @@ class _Loop:
 
 
 class _TrayIcon:
-    def __init__(self):
+    def __init__(self, stop_error=None):
         self.ran = False
+        self.stopped = False
+        self.stop_error = stop_error
 
     def run(self):
         self.ran = True
+
+    def stop(self):
+        if self.stop_error:
+            raise self.stop_error
+        self.stopped = True
 
 
 class _TrayManager:
@@ -374,6 +381,112 @@ class SiliconNetAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["recover"], 1)
         self.assertFalse(app.proxy_owned)
         self.assertIn(("error", "System proxy could not be enabled"), logger.messages)
+
+
+class _DeferredThread:
+    """Records the watcher target instead of running it, so tests drive it."""
+
+    started = None
+
+    def __init__(self, target=None, args=(), daemon=False):
+        self.target = target
+        self.args = args
+        self.daemon = daemon
+
+    def start(self):
+        _DeferredThread.started = self
+
+
+class SignalWakeupTests(unittest.TestCase):
+    """SIGTERM has to land even while pystray owns the main thread."""
+
+    def _app(self, **overrides):
+        base = SiliconNetAppTests()
+        ctx, logger, state = base._context(**overrides)
+        return SiliconNetApp(ctx), logger, state
+
+    def test_wakeup_fd_is_armed_and_a_watcher_thread_starts(self):
+        import socket as _socket
+
+        fds = []
+        app, logger, _ = self._app(
+            socketpair=_socket.socketpair,
+            set_wakeup_fd=fds.append,
+            thread_factory=_DeferredThread,
+        )
+        _DeferredThread.started = None
+
+        app.install_signal_wakeup()
+        self.addCleanup(lambda: [s.close() for s in app.wakeup_sockets])
+
+        reader, writer = app.wakeup_sockets
+        self.assertEqual(fds, [writer.fileno()])
+        self.assertIsNotNone(_DeferredThread.started)
+        self.assertTrue(_DeferredThread.started.daemon)
+        self.assertEqual(_DeferredThread.started.args, (reader,))
+
+    def test_a_signal_byte_stops_the_tray_loop(self):
+        import socket as _socket
+
+        icon = _TrayIcon()
+        app, _, _ = self._app(
+            socketpair=_socket.socketpair,
+            set_wakeup_fd=lambda fd: None,
+            thread_factory=_DeferredThread,
+        )
+        app.running = True
+        app.tray_icon = icon
+
+        app.install_signal_wakeup()
+        reader, writer = app.wakeup_sockets
+        self.addCleanup(lambda: [s.close() for s in (reader, writer)])
+
+        writer.send(b"\x0f")
+        app.watch_for_signal(reader)
+
+        self.assertTrue(icon.stopped)
+        self.assertFalse(app.running)
+
+    def test_shutdown_without_a_tray_just_clears_running(self):
+        app, _, _ = self._app()
+        app.running = True
+
+        app.request_shutdown()
+
+        self.assertFalse(app.running)
+
+    def test_a_failing_tray_stop_is_reported_and_not_raised(self):
+        icon = _TrayIcon(stop_error=RuntimeError("loop is gone"))
+        app, logger, _ = self._app()
+        app.running = True
+        app.tray_icon = icon
+
+        app.request_shutdown()
+
+        self.assertFalse(app.running)
+        self.assertIn(
+            ("warning", "Could not stop the tray loop: loop is gone"),
+            logger.messages,
+        )
+
+    def test_an_unavailable_socketpair_warns_instead_of_crashing(self):
+        def broken_socketpair():
+            raise OSError("no file descriptors")
+
+        app, logger, _ = self._app(
+            socketpair=broken_socketpair,
+            thread_factory=_DeferredThread,
+        )
+        _DeferredThread.started = None
+
+        app.install_signal_wakeup()
+
+        self.assertIsNone(app.wakeup_sockets)
+        self.assertIsNone(_DeferredThread.started)
+        self.assertIn(
+            ("warning", "Signal wakeup unavailable, SIGTERM may be ignored: no file descriptors"),
+            logger.messages,
+        )
 
 
 if __name__ == "__main__":

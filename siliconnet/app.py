@@ -7,6 +7,7 @@ import atexit
 from dataclasses import dataclass
 import os
 import signal
+import socket
 import sys
 import threading
 import time
@@ -50,6 +51,8 @@ class SiliconNetAppContext:
     signal_func: Callable[[Any, Any], Any] = signal.signal
     is_onboarding_complete: Callable[[], bool] = lambda: True
     open_url: Callable[[str], Any] = webbrowser.open
+    socketpair: Callable[[], tuple[Any, Any]] = socket.socketpair
+    set_wakeup_fd: Callable[[int], Any] = signal.set_wakeup_fd
 
 
 class SiliconNetApp:
@@ -63,6 +66,8 @@ class SiliconNetApp:
         self.port_ready = threading.Event()
         self.start_time = None
         self.proxy_owned = False
+        self.tray_icon = None
+        self.wakeup_sockets = None
 
     def enable_system_proxy(self) -> bool:
         if self.proxy_owned:
@@ -112,6 +117,54 @@ class SiliconNetApp:
         self.ctx.register_atexit(self.atexit_handler)
         self.ctx.signal_func(signal.SIGINT, self.cleanup_handler)
         self.ctx.signal_func(signal.SIGTERM, self.cleanup_handler)
+        self.install_signal_wakeup()
+
+    def install_signal_wakeup(self) -> None:
+        """Make signals reach us while the Cocoa run loop owns the main thread.
+
+        A Python signal handler only runs between bytecodes on the main thread,
+        but pystray parks that thread inside the Objective-C run loop. The
+        handlers above are therefore never invoked while the menu bar item is
+        alive: launchd's SIGTERM at logout is ignored until it escalates to
+        SIGKILL, and the system proxy is left pointing at a port nothing
+        listens on. Route signals through a socketpair instead -- the
+        interpreter writes to it from C -- and have a watcher thread stop the
+        run loop so the normal shutdown path in start() runs.
+        """
+        try:
+            reader, writer = self.ctx.socketpair()
+            reader.setblocking(True)
+            writer.setblocking(False)
+            self.ctx.set_wakeup_fd(writer.fileno())
+        except Exception as exc:
+            self.ctx.logger.warning(f"Signal wakeup unavailable, SIGTERM may be ignored: {exc}")
+            return
+        self.wakeup_sockets = (reader, writer)
+        watcher = self.ctx.thread_factory(
+            target=self.watch_for_signal,
+            args=(reader,),
+            daemon=True,
+        )
+        watcher.start()
+
+    def watch_for_signal(self, reader) -> None:
+        try:
+            woken = reader.recv(1)
+        except Exception:
+            return
+        if woken:
+            self.request_shutdown()
+
+    def request_shutdown(self) -> None:
+        """Leave the tray run loop so start() can finish its cleanup."""
+        self.running = False
+        icon = self.tray_icon
+        if icon is None:
+            return
+        try:
+            icon.stop()
+        except Exception as exc:
+            self.ctx.logger.warning(f"Could not stop the tray loop: {exc}")
 
     def atexit_handler(self) -> None:
         self.ctx.force_save()
@@ -218,6 +271,7 @@ class SiliconNetApp:
         if self.ctx.tray_available:
             try:
                 icon = self.ctx.tray_manager.setup()
+                self.tray_icon = icon
                 icon.run()
                 if self.running:
                     self.ctx.logger.warning("Tray loop ended unexpectedly; continuing without tray")
