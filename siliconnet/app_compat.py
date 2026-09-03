@@ -38,6 +38,9 @@ ENV_PROXY_VARS = (
 ENV_BYPASS_VARS = ("NO_PROXY", "no_proxy")
 ENV_BYPASS_VALUE = "localhost,127.0.0.1,::1"
 
+# Last value announced to the log, so the periodic re-check stays quiet.
+_last_logged_value: str | None = None
+
 _PROXY_PREFIXES = ("http://127.0.0.1:", "http://localhost:", "http://[::1]:")
 
 
@@ -90,13 +93,16 @@ def ensure_proxy_env(host: str, port: int, logger=None) -> bool:
     Only shells out to ``launchctl setenv`` when a value is missing or stale,
     so the periodic proxy-ownership check can call this freely.
     """
+    global _last_logged_value
     want = proxy_env_value(host, port)
     if is_proxy_env_published(host, port) and _getenv("NO_PROXY") == ENV_BYPASS_VALUE:
         # launchctl values outlive the process, so a restart usually lands here
         # and would otherwise say nothing at all -- leaving no trace that the
-        # env compat layer is active. Say so at debug level.
-        if logger:
+        # env compat layer is active. The proxy-ownership check calls this every
+        # few seconds, so only speak up when the value actually changes.
+        if logger and _last_logged_value != want:
             logger.debug(f"[APP-COMPAT] launchd proxy env already published ({want})")
+            _last_logged_value = want
         return True
     ok = True
     for name in ENV_PROXY_VARS:
@@ -105,6 +111,8 @@ def ensure_proxy_env(host: str, port: int, logger=None) -> bool:
     for name in ENV_BYPASS_VARS:
         if _getenv(name) != ENV_BYPASS_VALUE:
             ok = _setenv(name, ENV_BYPASS_VALUE) and ok
+    if ok:
+        _last_logged_value = want
     if logger:
         if ok:
             logger.info(f"[APP-COMPAT] launchd proxy env published ({want}); relaunch affected apps (e.g. Discord)")
@@ -119,6 +127,8 @@ def remove_proxy_env(logger=None) -> bool:
     A pre-existing foreign proxy setting in the launchd environment is left
     untouched rather than clobbered.
     """
+    global _last_logged_value
+    _last_logged_value = None
     ok = True
     for name in ENV_PROXY_VARS:
         if _looks_like_ours(_getenv(name)):
