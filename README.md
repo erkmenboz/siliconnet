@@ -95,7 +95,7 @@ SiliconNet never installs a daemon, never edits `/Library` or `/etc`, and never 
 SiliconNet lives in the menu bar, at the top right next to Wi-Fi and the clock. **A single click opens the menu** — macOS does not use the separate right-click menu that Windows tray icons have:
 
 ```text
-SiliconNet v2.1.4
+SiliconNet v1.0
 ─────────────────
 Status: Active
 Ping: 21ms

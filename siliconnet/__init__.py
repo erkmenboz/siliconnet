@@ -1,4 +1,4 @@
 """SiliconNet runtime package."""
 
-__version__ = "2.1.4"
+__version__ = "1.0"
 

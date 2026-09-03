@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0 - 2026-09-03
+
+First working macOS release. Version reset to 1.0: the numbering inherited from
+the upstream project did not describe this codebase, and nothing before this
+point ran end to end on macOS.
+
+- TLS *record* fragmentation is the SNI shield default. Measured against an ISP
+  that blocks by SNI, plain TCP segmentation (`host_split`) is reassembled by
+  the DPI and fails; splitting the ClientHello across two records succeeds.
+- Proxy environment variables are published into the launchd session, so apps
+  with embedded HTTP stacks that ignore the macOS proxy (Discord's updater)
+  still reach the proxy.
+- SIGTERM is honored while the menu bar item owns the main thread, so logout
+  and `launchctl bootout` restore the system proxy instead of leaking it.
+- Dashboard redrawn against the macOS palette: system colors, frosted toolbar,
+  the app icon in the header, light and dark appearance, and no web-font fetch.
+- Test runner and release verification use the virtualenv interpreter.
+
 ## 2.1.4 - 2026-09-02
 
 First SiliconNet release. macOS only: there is no Windows or Linux build, and no shared code path with one.
